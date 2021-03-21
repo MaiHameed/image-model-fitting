@@ -46,7 +46,7 @@ for i = 1:M
     end
 end
 
-% Compute affine based on all inliers of best set
+% Compute homography based on all inliers of best set
 Ap = zeros(2*size(prunedMatches,2),9);
 for i = 1:size(prunedMatches,2)
     % Finds the indexes of the coordinate pairings from the matches matrix
@@ -62,8 +62,8 @@ for i = 1:size(prunedMatches,2)
     % Get estimated result
     b = bestHomo*[xL;yL;1];
 
-    xError = abs(b(1)-xR);
-    yError = abs(b(2)-yR);
+    xError = abs((b(1)/b(3))-xR);
+    yError = abs((b(2)/b(3))-yR);
 
     % Check if coordinate is within error threshold, if so, consider it
     % an inlier

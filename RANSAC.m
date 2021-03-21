@@ -5,9 +5,9 @@ fprintf('Part A starting...\n');
 % Setup VLFeat for temp use
 run('vlfeat-0.9.21/toolbox/vl_setup');
 
-% Load images, get separate colour channels 
-LI = imread("parliament-left.jpg");
-RI = imread("parliament-right.jpg");
+% Load images
+LI = imread("./img_inputs/parliament-left.jpg");
+RI = imread("./img_inputs/parliament-right.jpg");
 
 % converted to single and grayscale
 leftImg = single(rgb2gray(LI));
@@ -15,7 +15,14 @@ rightImg = single(rgb2gray(RI));
 
 % The number of matches to extract from SIFT result
 pruneVal = 5000;
-[leftF, rightF, prunedMatches] = sift(leftImg, rightImg, pruneVal);
+
+% The sift() function takes a bit of time to complete so I stored all of
+% the workspace variables for quicker execution. If you want to see it run
+% instead, simply comment out the load() command, and uncomment the sift()
+% command
+load('./data/Part2A');
+%[leftF, rightF, prunedMatches] = sift(leftImg, rightImg, pruneVal);
+
 
 %% Compute affine transformation
 
@@ -23,160 +30,71 @@ pruneVal = 5000;
 disp('Computing affine transformation estimate using RANSAC');
 disp('This might take some time...');
 tic;
-affine = RansacAffineEst(prunedMatches,leftF,rightF,100000,pruneVal,0.75);
+affine = RansacAffineEst(prunedMatches,leftF,rightF,1000,1000,1);
 disp('Done!');
 toc;
-save('affine','affine');
+
+% The parameters to calculate my affine (which was fed into the
+% RansacAffineEst() function above) were reduced to speed up execution
+% time. I loaded in a better estimate below which was calculated using more
+% datapoints, and therefore took much longer to calculate. 
+load('./data/affine');
 
 %% Image stitching
 
 close all hidden;
 
 % Transformation
-T = [affine(1:2)' 0; affine(3:4)' 0; affine(5:6)' 1];
+T = [[affine(1) affine(2) affine(5)]' [affine(3) affine(4) affine(6)]' [0 0 1]'];
 tform = affine2d(T);
 
-% TODO: Remove this line when submitting
-RI = imread("parliament-right.jpg");
-RI = imwarp(RI,tform);
-
-[leftF, rightF, prunedMatches] = sift(leftImg, single(rgb2gray(RI)), pruneVal);
-
-%% Image composition
-
-% xL = leftF(1,prunedMatches(1,1));
-% yL = leftF(2,prunedMatches(1,1));
-% xR = rightF(1,prunedMatches(2,1));
-% yR = rightF(2,prunedMatches(2,1));
-
-xL = [];
-yL = [];
-xR = [];
-yR = [];
-for i = 1:pruneVal
-    xL = [xL leftF(1,prunedMatches(1,i))];
-    yL = [yL leftF(2,prunedMatches(1,i))];
-    xR = [xR rightF(1,prunedMatches(2,i))];
-    yR = [yR rightF(2,prunedMatches(2,i))];
-end
-
-diffX = abs(xL-xR);
-diffY = abs(yL-yR);
-
-xShift = round(median(diffX));
-yShift = round(median(diffY));
-
-SI = zeros(yShift+size(RI,1),xShift+size(RI,2),3);
-
-% A
-SRSI = 1; 
-ERSI = size(LI,1);
-SCSI = 1;
-ECSI = xShift;
-
-SRLI = 1;
-ERLI = size(LI,1);
-SCLI = 1;
-ECLI = xShift;
-SI(SRSI:ERSI,SCSI:ECSI,:) = LI(SRLI:ERLI,SCLI:ECLI,:);
-
-% B
-SRSI = 1; 
-ERSI = yShift;
-SCSI = xShift+1;
-ECSI = size(LI,2);
-
-SRLI = 1;
-ERLI = yShift;
-SCLI = xShift+1;
-ECLI = size(LI,2);
-SI(SRSI:ERSI,SCSI:ECSI,:) = LI(SRLI:ERLI,SCLI:ECLI,:);
-
-% C (Right image rows ends before left)
-for i = yShift+1:yShift+size(RI,1)
-    for j = xShift+1:size(LI,2)
-        leftPixel = LI(i,j,:);
-        rightPixel = RI(i-yShift,j-xShift,:);
-        if rightPixel ==  0
-            SI(i,j,:) = leftPixel;
-        else
-            SI(i,j,:) = rightPixel;
-        end
-    end
-end
-
-% C (Left image rows ends before right)
-% for i = yShift+1:size(LI,1)
-%     for j = xShift+1:size(LI,2)
-%         leftPixel = LI(i,j,:);
-%         rightPixel = RI(i-yShift,j-xShift,:);
-%         if rightPixel ==  0
-%             SI(i,j,:) = leftPixel;
-%         else
-%             SI(i,j,:) = rightPixel;
-%         end
-%     end
-% end
-
-% D (Left bigger than right)
-SRSI = size(RI,1)+yShift+1;
-ERSI = size(LI,1);
-SCSI = xShift+1;
-ECSI = size(LI,2);
-
-SRLI = size(RI,1)+yShift+1;
-ERLI = size(LI,1);
-SCLI = xShift+1;
-ECLI = size(LI,2);
-SI(SRSI:ERSI,SCSI:ECSI,:) = LI(SRLI:ERLI,SCLI:ECLI,:);
-
-% D (Right bigger than left)
-% SRSI = size(LI,1)+1; 
-% ERSI = size(RI,1)+yShift;
-% SCSI = xShift+1;
-% ECSI = size(LI,2);
-% 
-% SRRI = size(LI,1)-yShift+1;
-% ERRI = size(RI,1);
-% SCRI = 1;
-% ECRI = size(LI,2)-xShift;
-% SI(SRSI:ERSI,SCSI:ECSI,:) = RI(SRRI:ERRI,SCRI:ECRI,:);
-
-% E
-SRSI = yShift+1; 
-ERSI = yShift+size(RI,1);
-SCSI = size(LI,2);
-ECSI = size(RI,2)+xShift-1;
-
-SRRI = 1;
-ERRI = size(RI,1);
-SCRI = size(LI,2)-xShift+1;
-ECRI = size(RI,2);
-SI(SRSI:ERSI,SCSI:ECSI,:) = RI(SRRI:ERRI,SCRI:ECRI,:);
+RI = imread("./img_inputs/parliament-right.jpg");
+LI = imread("./img_inputs/parliament-left.jpg");
+LI = imwarp(LI,tform);
 
 figure;
-imshow(uint8(RI),[]);
-title("Right image, transformed");
-figure;
-imshow(uint8(LI),[]);
-title("Left image");
-figure;
-imshow(uint8(SI),[]);
-title("Composite image");
+imshow(uint8(LI));
+title("Warped left image");
 
-%fprintf('Part A done! Press enter to continue...\n\n');
-%pause;
+figure;
+imshow(uint8(RI));
+title("Original right image");
 
-%% Q2B
+%% Image stitching
+
+% The stitch() function takes some time to process, so I preprocessed it
+% and simply reloaded the variable here for quicker execution for the demo
+% only. If you want to run the stitch() function, simply uncomment the
+% function and comment out the load() function.
+%SI = stitch(LI, RI, pruneVal);
+load('./data/Part2A-SI');
+
+figure;
+imshow(uint8(SI));
+title("Combined image");
+
+fprintf('Part A done! Press enter to continue...\n\n');
+pause;
+
+%% Q2B-1
+
+fprintf('Part B-1 starting...\n\n');
+
 clear;
 
 % Load images, converted to single and grayscale
-leftImg = single(rgb2gray(imread("Ryerson-left.jpg")));
-rightImg = single(rgb2gray(imread("Ryerson-right.jpg")));
+leftImg = single(rgb2gray(imread("./img_inputs/Ryerson-left.jpg")));
+rightImg = single(rgb2gray(imread("./img_inputs/Ryerson-right.jpg")));
 
 % The number of matches to extract from SIFT result
 pruneVal = 5000;
-[leftF, rightF, prunedMatches] = sift(leftImg, rightImg, pruneVal);
+
+% The sift() function takes a bit of time to complete so I stored all of
+% the workspace variables for quicker execution. If you want to see it run
+% instead, simply comment out the load() command, and uncomment the sift()
+% command
+load('./data/Part2B');
+%[leftF, rightF, prunedMatches] = sift(leftImg, rightImg, pruneVal);
 
 %% Compute homography transformation
 
@@ -184,12 +102,110 @@ pruneVal = 5000;
 disp('Computing homography transformation estimate using RANSAC');
 disp('This might take some time...');
 tic;
-homography = RansacHomoEst(prunedMatches,leftF,rightF,5000,pruneVal,0.75);
+homography = RansacHomoEst(prunedMatches,leftF,rightF,500,500,1.5);
 disp('Done!');
 toc;
 
-% Reshape column vector into 3x3 matrix
-H = reshape(homography,[3,3])';
-tform = projective2d(H);
-imshow(uint8(imwarp(rightImg,tform)));
+% The parameters to calculate my homography (which was fed into the
+% RansacHomoEst() function above) were reduced to speed up execution
+% time. I loaded in a better estimate below which was calculated using more
+% datapoints, and therefore took much longer to calculate. 
+load('./data/homography');
 
+% Reshape column vector into 3x3 matrix
+H = reshape(homography,[3,3]);
+tform = projective2d(H);
+
+RI = imread("./img_inputs/Ryerson-right.jpg");
+LI = imread("./img_inputs/Ryerson-left.jpg");
+
+%% Image stitching
+
+% The stitch() function takes some time to process, so I preprocessed it
+% and simply reloaded the variable here for quicker execution for the demo
+% only. If you want to run the stitch() function, simply uncomment the
+% function and comment out the load() function.
+%SI = stitch(imwarp(LI,tform), RI, pruneVal);
+load('./data/Part2B-SI');
+
+figure;
+imshow(uint8(imwarp(LI,tform)));
+title("Warped left image");
+
+figure;
+imshow(uint8(RI));
+title("Right image");
+
+figure;
+imshow(uint8(SI));
+title("Combined image");
+
+fprintf('Part B-1 done! Press enter to continue...\n\n');
+pause;
+
+%% Q2B-2
+
+fprintf('Part B-2 starting...\n\n');
+
+clear;
+
+% Load images, converted to single and grayscale
+leftImg = single(rgb2gray(imread("./img_inputs/campus-left.jpg")));
+rightImg = single(rgb2gray(imread("./img_inputs/campus-right.jpg")));
+
+% The number of matches to extract from SIFT result
+pruneVal = 2500;
+
+% The sift() function takes a bit of time to complete so I stored all of
+% the workspace variables for quicker execution. If you want to see it run
+% instead, simply comment out the load() command, and uncomment the sift()
+% command
+load('./data/Part2B-2');
+%[leftF, rightF, prunedMatches] = sift(leftImg, rightImg, pruneVal);
+
+%% Compute homography transformation
+
+% From sample list, compute homography transformation
+disp('Computing homography transformation estimate using RANSAC');
+disp('This might take some time...');
+tic;
+homography = RansacHomoEst(prunedMatches,leftF,rightF,500,500,1);
+disp('Done!');
+toc;
+
+% The parameters to calculate my homography (which was fed into the
+% RansacHomoEst() function above) were reduced to speed up execution
+% time. I loaded in a better estimate below which was calculated using more
+% datapoints, and therefore took much longer to calculate. 
+load('./data/homography-2B-2');
+
+% Reshape column vector into 3x3 matrix
+H = reshape(homography,[3,3]);
+tform = projective2d(H);
+
+
+%% Image stitching
+
+LI = imread("./img_inputs/campus-left.jpg");
+RI = imread("./img_inputs/campus-right.jpg");
+
+% The stitch() function takes some time to process, so I preprocessed it
+% and simply reloaded the variable here for quicker execution for the demo
+% only. If you want to run the stitch() function, simply uncomment the
+% function and comment out the load() function.
+%SI = stitch(imwarp(LI,tform), RI, pruneVal);
+load('./data/Part2B-2-SI');
+
+figure;
+imshow(uint8(imwarp(LI,tform)));
+title("Warped left image");
+
+figure;
+imshow(uint8(RI));
+title("Right image");
+
+figure;
+imshow(uint8(SI));
+title("Combined image");
+
+fprintf('Part B done!\n\n');

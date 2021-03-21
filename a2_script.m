@@ -15,3 +15,9 @@ fprintf('Question 2 starting...\n');
 RANSAC;
 fprintf('Question 2 done! Press enter to continue...\n\n');
 pause;
+
+%% BONUS
+
+fprintf('Bonus starting...\n');
+bonus;
+fprintf('Bonus done! End of program\n\n');
